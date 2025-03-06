@@ -186,18 +186,6 @@ plt.ylabel('Percentage of Total R/T/A')
 plt.legend(['Reflection','Transmission','Absorption'], loc='upper right')
 plt.show()
 
-plt.plot(wv_sweep, Rs)
-plt.title('Reflection of Data Set')
-plt.xlabel('Nanometers')
-plt.ylabel('Percentage of Total Transmission')
-plt.show()
-
-plt.plot(wv_sweep, As)
-plt.title('Absorption of Data Set')
-plt.xlabel('Nanometers')
-plt.ylabel('Percentage of Total Transmission')
-plt.show()
-
 plt.plot(wv_sweep, Ts)
 plt.title('Transmission of Data Set')
 plt.xlabel('Nanometers')
