@@ -23,34 +23,6 @@ Np = 100                     # Number of patterned layers
 epbkg = 5                  # Dielectric value of uniform sphere
 diameter = 1.              # diameter of sphere
 
-#print("Now running the uniform_sphere function:")
-#R,T = uniformsphere(nG,L1,L2,theta,Nx,Ny,Np,epbkg,diameter)
-#print('R=',R,', T=',T,', R+T=',R+T)
 print("Now running the honeycomb_lattice function:")
 R,T = honeycomb_lattice(nG,L1,L2,theta,Nx,Ny,Np,epbkg,diameter)
 print('R=',R,', T=',T,', R+T=',R+T)
-
-'''
-
-R = np.zeros(90)
-T = np.zeros(90)
-R1 = np.zeros(90)
-T1 = np.zeros(90)
-theta = np.linspace(0,89,90)
-print(theta)
-for angle in range(0,90):
-    R[angle],T[angle] = uniformsphere(nG,L1,L2,math.radians(theta[angle]),Nx,Ny,Np,epbkg,diameter)
-    R1[angle],T1[angle] = honeycomb_lattice(nG,L1,L2,math.radians(theta[angle]),Nx,Ny,Np,epbkg,diameter)
-
-plt.plot(theta,R, label='Ru')
-plt.plot(theta,T,'-.', label='Tu')
-plt.plot(theta,R1, label='Rh')
-plt.plot(theta,T1,'-.', label='Th')
-plt.xlabel("Angle of Incidence Light")
-plt.ylabel("Percent of Incidence Light Reflected Transmitted")
-plt.legend()
-plt.show()
-
-'''
-
-'''This section is for graphing, not always needed, takes about 10 seconds per calculation'''
