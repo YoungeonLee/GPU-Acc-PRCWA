@@ -37,12 +37,12 @@ def honeycomb_lattice(obj,Nx,Ny,Np,eps,diameter):
         (-np.sqrt(3), 1, 0), 
         (-np.sqrt(3), -1, 0)
     ]
-    strucutre = honeycomb_structure(Nx, Ny, Np, centers)
+    structure = honeycomb_structure(Nx, Ny, Np, centers)
     
     epgrid = np.array([])   
     for i in range(Np):
         epname = np.ones((Nx, Ny), dtype=complex)
-        epname[strucutre[:, :, i]] = eps
+        epname[structure[:, :, i]] = eps
         epgrid = np.append(epgrid.flatten(),epname.flatten())
 
     return epgrid
