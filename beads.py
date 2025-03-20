@@ -59,8 +59,16 @@ SodaLime = RefractiveIndexMaterial(shelf='glass', book='soda-lime', page='Rubin-
 
 dev_structure = [
     ('air',0.0*nm_to_um,'slab'),
-    (SiO2,8000,'honeycomb'),
-    (SodaLime,1000000,'slab'),
+    (SiO2,230,'honeycomb'),
+    (HfO2,485,'slab'),
+    (SiO2,688,'honeycomb'),
+    (HfO2,13,'slab'),
+    (SiO2,73,'honeycomb'),
+    (HfO2,34,'slab'),
+    (SiO2,54,'honeycomb'),
+    (Ag,200,'slab'),
+    (Ti,20,'slab'),
+    (Si,750,'slab'),
     ('air',0.0*nm_to_um,'slab')
 ]
 start_wv = 5000  # 5 um
@@ -94,7 +102,7 @@ Rss = np.zeros((len(theta), len(Rs)))
 Tss = np.zeros((len(theta), len(Ts)))
 start_time = time.time()
 
-epgrid = None
+epgrids = np.array([])
 for z in range(len(theta)):
     print(f'theta {z}')
     for i in range(len(freqs)):
@@ -104,16 +112,20 @@ for z in range(len(theta)):
         wavelength = wv_sweep[i]
         for material, thickness, type in dev_structure:
             if type == "slab":
+                if material == Ti:
+                    if wavelength > 2300:
+                        material = Ti_2
                 obj.Add_LayerUniform(thickness, Index_Lookup(material,wavelength))
             elif type == "honeycomb":
                 epgrid = honeycomb_lattice(obj,Nx,Ny,Np,Index_Lookup(material,wavelength),thickness)
+                epgrids = np.append(epgrids.flatten(),epgrid.flatten())
             else:
                 raise NotImplementedError
 
         obj.Init_Setup()
 
-        if epgrid is not None:
-            obj.GridLayer_geteps(epgrid)
+        if len(epgrids) != 0:
+            obj.GridLayer_geteps(epgrids)
 
         # planewave excitation
         planewave={'p_amp':1,'s_amp':0,'p_phase':0,'s_phase':0}
@@ -132,17 +144,20 @@ Ts = np.mean(Tss,axis=0)
 print("This computation took %s seconds to run" % round((time.time() - start_time),4))
 As = 1 - Rs - Ts
 
-plt.plot(wv_sweep, Rs)
-plt.plot(wv_sweep, Ts)
+# plt.plot(wv_sweep, Rs)
+# plt.plot(wv_sweep, Ts)
 plt.plot(wv_sweep, As)
-plt.title('Reflection, Absorption, and Transmission of Data Set')
+# plt.title('Reflection, Absorption, and Transmission of Data Set')
+plt.title('Absorption')
+
 plt.xlabel('Nanometers')
-plt.ylabel('Percentage of Total R/T/A')
-plt.legend(['Reflection','Transmission','Absorption'], loc='upper right')
+plt.ylabel('R')
+# plt.legend(['Reflection','Transmission','Absorption'], loc='upper right')
+plt.legend(['Absorption'], loc='upper right')
 plt.show()
 
-plt.plot(wv_sweep, Ts)
-plt.title('Transmission of Data Set')
-plt.xlabel('Nanometers')
-plt.ylabel('Percentage of Total Transmission')
-plt.show()
+# plt.plot(wv_sweep, Ts)
+# plt.title('Transmission of Data Set')
+# plt.xlabel('Nanometers')
+# plt.ylabel('Percentage of Total Transmission')
+# plt.show()
