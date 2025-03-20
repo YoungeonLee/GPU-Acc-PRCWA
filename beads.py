@@ -37,12 +37,12 @@ def honeycomb_lattice(obj,Nx,Ny,Np,eps,diameter):
         (-np.sqrt(3), 1, 0), 
         (-np.sqrt(3), -1, 0)
     ]
-    strucutre = honeycomb_structure(Nx, Ny, Np, centers)
+    structure = honeycomb_structure(Nx, Ny, Np, centers)
     
     epgrid = np.array([])   
     for i in range(Np):
         epname = np.ones((Nx, Ny), dtype=complex)
-        epname[strucutre[:, :, i]] = eps
+        epname[structure[:, :, i]] = eps
         epgrid = np.append(epgrid.flatten(),epname.flatten())
 
     return epgrid
@@ -71,93 +71,78 @@ dev_structure = [
     (Si,750,'slab'),
     ('air',0.0*nm_to_um,'slab')
 ]
-start_wv = 5000  # 5 um
-end_wv = 20000   # 20 um
-wv_sweep = np.linspace(start_wv, end_wv, num=100, endpoint=True)
-
-# grcwa
 
 DEG_TO_RAD = np.pi / 180
-
-# Truncation order (actual number might be smaller)
-nG = 40
-# lattice constants
-L1 = [np.sqrt(3),0] # 1 um
-L2 = [0,1]
-# frequency and angles
-# theta = 0 * DEG_TO_RAD
-theta = np.linspace(0, 80 * DEG_TO_RAD, num=10, endpoint=True)
-phi = 0.
-# wls = np.linspace(5, 20, num=300, endpoint=True) # sweep from 5 um to 20 um
-freqs = 1 / wv_sweep
 Qabs = np.inf
-freqcmps = freqs*(1+1j/2/Qabs)
-Nx = 100
-Ny = 100
-Np = 10     # number of discrete layers for sphere
 
-Rs = np.zeros_like(freqs)
-Ts = np.zeros_like(freqs)
-Rss = np.zeros((len(theta), len(Rs)))
-Tss = np.zeros((len(theta), len(Ts)))
-start_time = time.time()
+def beads(wv_sweep, nG=40, 
+          theta_start=0, theta_end=80, n_theta=10, theta_sweep=True, 
+          Nx=100, Ny=100, Np=10, structure=dev_structure):
+    """
+    wv in nm
+    nG = truncation order
+    theta in degrees
+    if theta_sweep == False: use theta_start as the angle
+    """               
+    freqs = 1 / wv_sweep
+    freqcmps = freqs*(1+1j/2/Qabs)
 
-epgrids = np.array([])
-for z in range(len(theta)):
-    print(f'theta {z}')
-    for i in range(len(freqs)):
-        print(f'freq {i}')
-        ######### setting up RCWA
-        obj = grcwa.obj(nG,L1,L2,freqcmps[i],theta[z],phi,verbose=0)
-        wavelength = wv_sweep[i]
-        for material, thickness, type in dev_structure:
-            if type == "slab":
+    # lattice constants
+    L1 = [np.sqrt(3),0] # 1 um
+    L2 = [0,1]
+    
+    theta = np.linspace(theta_start, theta_end * DEG_TO_RAD, num=n_theta, endpoint=True)
+    phi = 0.
+
+    Rs = np.zeros_like(freqs)
+    Ts = np.zeros_like(freqs)
+    Rss = np.zeros((len(theta), len(Rs)))
+    Tss = np.zeros((len(theta), len(Ts)))
+
+    for z in range(len(theta)):
+        print(f'theta {z}')
+        for i in range(len(freqs)):
+            epgrids = np.array([])
+
+            # print(f'freq {freqs[i]}')
+            ######### setting up RCWA
+            obj = grcwa.obj(nG,L1,L2,freqcmps[i],theta[z],phi,verbose=0)
+            wavelength = wv_sweep[i]
+            for material, thickness, type in structure:
                 if material == Ti:
                     if wavelength > 2300:
                         material = Ti_2
-                obj.Add_LayerUniform(thickness, Index_Lookup(material,wavelength))
-            elif type == "honeycomb":
-                epgrid = honeycomb_lattice(obj,Nx,Ny,Np,Index_Lookup(material,wavelength),thickness)
-                epgrids = np.append(epgrids.flatten(),epgrid.flatten())
-            else:
-                raise NotImplementedError
+                if type == "slab":
+                    obj.Add_LayerUniform(thickness, Index_Lookup(material,wavelength))
+                elif type == "honeycomb":
+                    epgrid = honeycomb_lattice(obj,Nx,Ny,Np,Index_Lookup(material,wavelength),thickness)
+                    epgrids = np.append(epgrids.flatten(),epgrid.flatten())
+                else:
+                    raise NotImplementedError
 
-        obj.Init_Setup()
+            obj.Init_Setup()
 
-        if len(epgrids) != 0:
-            obj.GridLayer_geteps(epgrids)
+            if len(epgrids) != 0:
+                obj.GridLayer_geteps(epgrids)
 
-        # planewave excitation
-        planewave={'p_amp':1,'s_amp':0,'p_phase':0,'s_phase':0}
-        obj.MakeExcitationPlanewave(planewave['p_amp'],planewave['p_phase'],planewave['s_amp'],planewave['s_phase'],order = 0)
+            # planewave excitation
+            planewave={'p_amp':1,'s_amp':0,'p_phase':0,'s_phase':0}
+            obj.MakeExcitationPlanewave(planewave['p_amp'],planewave['p_phase'],planewave['s_amp'],planewave['s_phase'],order = 0)
 
-        # compute reflection and transmission
-        R,T= obj.RT_Solve(normalize=1)
-        # print('R=',R,', T=',T,', R+T=',R+T)
-        Rs[i] = np.real(R)
-        Ts[i] = np.real(T)
-        Rss[z,i] = np.real(R)
-        Tss[z,i] = np.real(T)
+            # compute reflection and transmission
+            R,T= obj.RT_Solve(normalize=1)
 
-Rs = np.mean(Rss,axis=0)
-Ts = np.mean(Tss,axis=0)
-print("This computation took %s seconds to run" % round((time.time() - start_time),4))
-As = 1 - Rs - Ts
+            Rs[i] = np.real(R)
+            Ts[i] = np.real(T)
+            Rss[z,i] = np.real(R)
+            Tss[z,i] = np.real(T)
 
-# plt.plot(wv_sweep, Rs)
-# plt.plot(wv_sweep, Ts)
-plt.plot(wv_sweep, As)
-# plt.title('Reflection, Absorption, and Transmission of Data Set')
-plt.title('Absorption')
+        if not theta_sweep:
+            As = 1 - Rs - Ts
+            return Rs, Ts, As 
 
-plt.xlabel('Nanometers')
-plt.ylabel('R')
-# plt.legend(['Reflection','Transmission','Absorption'], loc='upper right')
-plt.legend(['Absorption'], loc='upper right')
-plt.show()
+    Rs = np.mean(Rss,axis=0)
+    Ts = np.mean(Tss,axis=0)
+    As = 1 - Rs - Ts
 
-# plt.plot(wv_sweep, Ts)
-# plt.title('Transmission of Data Set')
-# plt.xlabel('Nanometers')
-# plt.ylabel('Percentage of Total Transmission')
-# plt.show()
+    return Rss, Tss, As
