@@ -20,15 +20,15 @@ device = torch.device('cpu')
 
 def honeycomb_structure_gpu(Nx, Ny, Nz, centers=[(0, 0, 0)]):
     """returns 3D numpy boolean array of honeycomb structure"""
-    x = np.linspace(-np.sqrt(3), np.sqrt(3), Nx)
-    y = np.linspace(-1, 1, Ny)
-    z = np.linspace(-1, 1, Nz)
+    x = torch.linspace(-torch.sqrt(3), torch.sqrt(3), Nx, dtype=geo_dtype,device=device)
+    y = torch.linspace(-1, 1, Ny, dtype=geo_dtype,device=device)
+    z = torch.linspace(-1, 1, Nz, dtype=geo_dtype,device=device)
     radius = 1
 
-    X, Y, Z = np.meshgrid(x, y, z, indexing='ij')
+    X, Y, Z = torch.meshgrid(x, y, z, indexing='ij')
 
     # Initialize mask
-    sphere_mask = np.zeros((Nx, Ny, Nz), dtype=bool)
+    sphere_mask = torch.zeros((Nx, Ny, Nz), dtype=bool)
 
     # Create spheres at given centers
     for cx, cy, cz in centers:
@@ -37,7 +37,7 @@ def honeycomb_structure_gpu(Nx, Ny, Nz, centers=[(0, 0, 0)]):
     return sphere_mask
 
 def honeycomb_lattice_gpu(obj,Nx,Ny,Np,eps,diameter):
-    """apply honeycomb lattice to grcwa obj"""
+    """apply honeycomb lattice to torcwa obj"""
     thickp = diameter/Np                                                # thickness of patterned layer
 
     for _ in range(Np):
@@ -45,10 +45,10 @@ def honeycomb_lattice_gpu(obj,Nx,Ny,Np,eps,diameter):
 
     centers = [
         (0, 0, 0), 
-        (np.sqrt(3), 1, 0), 
-        (np.sqrt(3), -1, 0), 
-        (-np.sqrt(3), 1, 0), 
-        (-np.sqrt(3), -1, 0)
+        (torch.sqrt(3), 1, 0), 
+        (torch.sqrt(3), -1, 0), 
+        (-torch.sqrt(3), 1, 0), 
+        (-torch.sqrt(3), -1, 0)
     ]
     structure = honeycomb_structure_gpu(Nx, Ny, Np, centers)
     
@@ -80,8 +80,8 @@ dev_structure = [
 DEG_TO_RAD = np.pi / 180
 Qabs = np.inf
 
-def gpu_accleration(wv_sweep, nG=40, 
-          theta_start=0, theta_end=80, n_theta=10, theta_sweep=True, 
+def gpu_acceleration(wv_sweep, nG=40, 
+          theta_start=0, theta_end=80, n_theta=10, theta_sweep=False,
           Nx=100, Ny=100, Np=10, structure=dev_structure):
     """
     wv in nm
@@ -93,10 +93,9 @@ def gpu_accleration(wv_sweep, nG=40,
     freqcmps = freqs*(1+1j/2/Qabs)
 
     # lattice constants
-    L1 = [np.sqrt(3),0] # sqrt(3) um
-    L2 = [0,1]          # 1 um
-    torcwa.rcwa_geo.Lx = L1
-    torcwa.rcwa_geo.Ly = L2
+    L = [torch.sqrt(3),1] # sqrt(3) by 1 um
+    torcwa.rcwa_geo.Lx = L[0]
+    torcwa.rcwa_geo.Ly = L[1]
     torcwa.rcwa_geo.nx = Nx
     torcwa.rcwa_geo.ny = Ny
     torcwa.rcwa_geo.grid()
@@ -104,13 +103,15 @@ def gpu_accleration(wv_sweep, nG=40,
     torcwa.rcwa_geo.dtype = geo_dtype
     torcwa.rcwa_geo.device = device
     
-    theta = np.linspace(theta_start * DEG_TO_RAD, theta_end * DEG_TO_RAD, num=n_theta, endpoint=True)
+    theta = torch.linspace(theta_start * DEG_TO_RAD, theta_end * DEG_TO_RAD, n_theta, dtype=geo_dtype,device=device)
     phi = 0.
 
-    Rs = np.zeros_like(freqs)
-    Ts = np.zeros_like(freqs)
-    Rss = np.zeros((len(theta), len(Rs)))
-    Tss = np.zeros((len(theta), len(Ts)))
+    Rs = torch.zeros_like(freqs)
+    Ts = torch.zeros_like(freqs)
+    Rss = torch.zeros((len(theta), len(Rs)))
+    Tss = torch.zeros((len(theta), len(Ts)))
+
+    nG_order = [nG,nG]
 
     for z in range(len(theta)):
         print(f'theta {z}')
@@ -119,14 +120,15 @@ def gpu_accleration(wv_sweep, nG=40,
 
             # print(f'freq {freqs[i]}')
             ######### setting up RCWA
-            obj = grcwa.obj(nG,L1,L2,freqcmps[i],theta[z],phi,verbose=0)
+            #obj = grcwa.obj(nG,L1,L2,freqcmps[i],theta[z],phi,verbose=0)
+            obj = torcwa.rcwa(freq=i,order=nG_order,L=L,dtype=geo_dtype,device=device)
             wavelength = wv_sweep[i]
             for material, thickness, type in structure:
                 if material == Ti:
                     if wavelength > 2300:
                         material = Ti_2
                 if type == "slab":
-                    obj.Add_LayerUniform(thickness, Index_Lookup(material,wavelength))
+                    obj.add_layer(thickness, Index_Lookup(material,wavelength))
                 elif type == "honeycomb":
                     epgrid = honeycomb_lattice_gpu(obj,Nx,Ny,Np,Index_Lookup(material,wavelength),thickness)
                     epgrids = np.append(epgrids.flatten(),epgrid.flatten())
