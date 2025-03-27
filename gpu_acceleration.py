@@ -17,8 +17,9 @@ sim_dtype = torch.complex64
 geo_dtype = torch.float32
 device = torch.device('cpu')
 
-def honeycomb_lattice_gpu(Nx,Ny,Np,eps):
+def honeycomb_lattice_gpu(Nx,Ny,Np,eps,diameter):
     """apply honeycomb lattice to torcwa obj"""
+    thickp = diameter/Np
 
     centers = [
         (0, 0, 0), 
@@ -121,7 +122,7 @@ def gpu_acceleration(wv_sweep, nG=40,
                 if type == "slab":
                     obj.add_layer(thickness, Index_Lookup(material,wavelength))
                 elif type == "honeycomb":
-                    epgrid = honeycomb_lattice_gpu(Nx,Ny,Np,Index_Lookup(material,wavelength))
+                    epgrid = honeycomb_lattice_gpu(Nx,Ny,Np,Index_Lookup(material,wavelength),thickness)
                     epgrids = np.append(epgrids.flatten(),epgrid.flatten())
                 else:
                     raise NotImplementedError
