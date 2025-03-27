@@ -13,8 +13,8 @@ import torcwa
 # Hardware
 # If GPU support TF32 tensor core, the matmul operation is faster than FP32 but with less precision.
 # If you need accurate operation, you have to disable the flag below.
-torch.backends.cuda.matmul.allow_tf32 = False # Set to True if using RTX 3090 or above
-sim_dtype = torch.complex64
+# torch.backends.cuda.matmul.allow_tf32 = False # Set to True if using RTX 3090 or above
+sim_dtype = torch.complex128
 geo_dtype = torch.float32
 device = torch.device('cpu')
 
@@ -89,21 +89,22 @@ def gpu_acceleration(wv_sweep, nG=40,
     theta in degrees
     if theta_sweep == False: use theta_start as the angle
     """               
-    freqs = 1 / wv_sweep
+    freqs = 1 / (wv_sweep)
     freqcmps = freqs*(1+1j/2/Qabs)
 
     # lattice constants
-    L = [torch.sqrt(3),1] # sqrt(3) by 1 um
+    # L = [torch.sqrt(torch.tensor(3.0)),1] # sqrt(3) by 1 um
+    L = [1, 1]
     torcwa.rcwa_geo.Lx = L[0]
     torcwa.rcwa_geo.Ly = L[1]
     torcwa.rcwa_geo.nx = Nx
     torcwa.rcwa_geo.ny = Ny
-    torcwa.rcwa_geo.grid()
-    torcwa.rcwa_geo.edge_sharpness = 1000.
-    torcwa.rcwa_geo.dtype = geo_dtype
+    # torcwa.rcwa_geo.grid()
+    # torcwa.rcwa_geo.edge_sharpness = 1000.
+    # torcwa.rcwa_geo.dtype = geo_dtype
     torcwa.rcwa_geo.device = device
     
-    theta = torch.linspace(theta_start * DEG_TO_RAD, theta_end * DEG_TO_RAD, n_theta, dtype=geo_dtype,device=device)
+    theta = torch.linspace(theta_start * DEG_TO_RAD, theta_end * DEG_TO_RAD, n_theta, dtype=torch.float32, device=device)
     phi = 0.
 
     Rs = torch.zeros_like(freqs)
@@ -116,36 +117,36 @@ def gpu_acceleration(wv_sweep, nG=40,
     for z in range(len(theta)):
         print(f'theta {z}')
         for i in range(len(freqs)):
-            epgrids = np.array([])
+            print(f'freq {i}')
+            # epgrids = np.array([])
 
             # print(f'freq {freqs[i]}')
             ######### setting up RCWA
             #obj = grcwa.obj(nG,L1,L2,freqcmps[i],theta[z],phi,verbose=0)
-            obj = torcwa.rcwa(freq=i,order=nG_order,L=L,dtype=geo_dtype,device=device)
+            sim = torcwa.rcwa(freq=freqs[i],order=nG_order,L=L,dtype=sim_dtype,device=device)
+            sim.set_incident_angle(inc_ang=theta[z],azi_ang=0)
             wavelength = wv_sweep[i]
             for material, thickness, type in structure:
                 if material == Ti:
                     if wavelength > 2300:
                         material = Ti_2
                 if type == "slab":
-                    obj.add_layer(thickness, Index_Lookup(material,wavelength))
+                    # print(f'slab added: {material}')
+                    # print(torch.tensor(Index_Lookup(material,wavelength)))
+                    # print(torch.tensor(Index_Lookup(material,wavelength)))
+                    sim.add_layer(thickness, torch.tensor(Index_Lookup(material,wavelength)))
                 elif type == "honeycomb":
+                    raise NotImplementedError
                     epgrid = honeycomb_lattice_gpu(obj,Nx,Ny,Np,Index_Lookup(material,wavelength),thickness)
                     epgrids = np.append(epgrids.flatten(),epgrid.flatten())
                 else:
                     raise NotImplementedError
+            # sim.add_output_layer(eps=1.)
 
-            obj.Init_Setup()
+            sim.solve_global_smatrix()
 
-            if len(epgrids) != 0:
-                obj.GridLayer_geteps(epgrids)
-
-            # planewave excitation
-            planewave={'p_amp':1,'s_amp':0,'p_phase':0,'s_phase':0}
-            obj.MakeExcitationPlanewave(planewave['p_amp'],planewave['p_phase'],planewave['s_amp'],planewave['s_phase'],order = 0)
-
-            # compute reflection and transmission
-            R,T= obj.RT_Solve(normalize=1)
+            R = sim.S_parameters(orders=[0,0],direction='forward',port='reflection')
+            T = sim.S_parameters(orders=[0,0],direction='forward',port='transmission')
 
             Rs[i] = np.real(R)
             Ts[i] = np.real(T)
