@@ -77,7 +77,7 @@ Qabs = np.inf
 
 def beads(wv_sweep, nG=40, 
           theta_start=0, theta_end=80, n_theta=10, theta_sweep=True, 
-          Nx=100, Ny=100, Np=10, structure=dev_structure):
+          Nx=100, Ny=100, Np=10, structure=dev_structure, diameter=1):
     """
     wv in nm
     nG = truncation order
@@ -88,8 +88,8 @@ def beads(wv_sweep, nG=40,
     freqcmps = freqs*(1+1j/2/Qabs)
 
     # lattice constants
-    L1 = [np.sqrt(3),0] # 1 um
-    L2 = [0,1]
+    L1 = [diameter*np.sqrt(3),0] # 1 um
+    L2 = [0,1*diameter]
     
     theta = np.linspace(theta_start, theta_end * DEG_TO_RAD, num=n_theta, endpoint=True)
     phi = 0.
@@ -110,11 +110,12 @@ def beads(wv_sweep, nG=40,
             wavelength = wv_sweep[i]
             for material, thickness, type in structure:
                 if material == Ti:
-                    if wavelength > 2300:
+                    if wavelength > 2.3:
                         material = Ti_2
                 if type == "slab":
                     obj.Add_LayerUniform(thickness, Index_Lookup(material,wavelength))
                 elif type == "honeycomb":
+                    assert thickness == diameter
                     epgrid = honeycomb_lattice(obj,Nx,Ny,Np,Index_Lookup(material,wavelength),thickness)
                     epgrids = np.append(epgrids.flatten(),epgrid.flatten())
                 else:
