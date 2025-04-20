@@ -1,7 +1,11 @@
 from IndexLookup import Index_Lookup
 from refractiveindex import RefractiveIndexMaterial
-import numpy as np
 import grcwa
+import numpy as npf
+import autograd.numpy as np
+from autograd import grad
+import matplotlib.pyplot as plt
+# import nlopt
 
 def honeycomb_structure(Nx, Ny, Nz, centers=[(0, 0, 0)]):
     """returns 3D numpy boolean array of honeycomb structure"""
@@ -73,15 +77,18 @@ dev_structure = [
 DEG_TO_RAD = np.pi / 180
 Qabs = np.inf
 
-def beads(wv_sweep, nG=40, 
+def loss_fun(thicknesses, wv_sweep, nG=40, 
           theta_start=0, theta_end=80, n_theta=10, theta_sweep=True, 
-          Nx=100, Ny=100, Np=10, structure=dev_structure, diameter=1):
+          Nx=100, Ny=100, Np=10, structure=dev_structure, diameter=1, plot=False):
     """
     wv in nm
     nG = truncation order
     theta in degrees
     if theta_sweep == False: use theta_start as the angle
-    """               
+    """
+
+    loss = np.array(0.)
+             
     freqs = 1 / wv_sweep
     freqcmps = freqs*(1+1j/2/Qabs)
 
@@ -92,13 +99,13 @@ def beads(wv_sweep, nG=40,
     theta = np.linspace(theta_start, theta_end * DEG_TO_RAD, num=n_theta, endpoint=True)
     phi = 0.
 
-    Rs = np.zeros_like(freqs)
-    Ts = np.zeros_like(freqs)
-    Rss = np.zeros((len(theta), len(Rs)))
-    Tss = np.zeros((len(theta), len(Ts)))
+    Rs = []
+    Ts = []
+    Rss = []
+    Tss = []
 
     for z in range(len(theta)):
-        print(f'theta {z}')
+        # print(f'theta {z}')
         for i in range(len(freqs)):
             epgrids = np.array([])
 
@@ -106,12 +113,14 @@ def beads(wv_sweep, nG=40,
             ######### setting up RCWA
             obj = grcwa.obj(nG,L1,L2,freqcmps[i],theta[z],phi,verbose=0)
             wavelength = wv_sweep[i]
-            for material, thickness, type in structure:
+            for j in range(len(structure)):
+                material, thickness, type = structure[j]
                 if material == Ti:
+                    print('Ti')
                     if wavelength > 2.3:
                         material = Ti_2
                 if type == "slab":
-                    obj.Add_LayerUniform(thickness, Index_Lookup(material,wavelength))
+                    obj.Add_LayerUniform(thicknesses[j], Index_Lookup(material,wavelength))
                 elif type == "honeycomb":
                     assert thickness == diameter
                     epgrid = honeycomb_lattice(obj,Nx,Ny,Np,Index_Lookup(material,wavelength),thickness)
@@ -130,18 +139,72 @@ def beads(wv_sweep, nG=40,
 
             # compute reflection and transmission
             R,T= obj.RT_Solve(normalize=1)
+            Rs.append(np.real(R))
+            if wavelength > 8 and wavelength < 13:
+                loss += np.real(R) ** 2
+            else:
+                loss += (1 - np.real(R)) ** 2
 
-            Rs[i] = np.real(R)
-            Ts[i] = np.real(T)
-            Rss[z,i] = np.real(R)
-            Tss[z,i] = np.real(T)
+        # Rs = np.stack(Rs)
+        # Ts = np.stack(Ts)
 
         if not theta_sweep:
-            As = 1 - Rs - Ts
-            return Rs, Ts, As 
+            # As = 1 - Rs - Ts
+            if plot:
+                plt.clf()
+                plt.plot(wv_sweep, 1 - np.array(Rs))
+                plt.title('Absorbance')
+                plt.xlabel('Wavelength (μm)')
+                plt.ylim(0, 1)
+                plt.show()
+            return loss
+        
+        # needs to be checked
+        Rss.append(Rs)
+        Tss.append(Ts)
 
+    raise NotImplementedError
     Rs = np.mean(Rss,axis=0)
     Ts = np.mean(Tss,axis=0)
     As = 1 - Rs - Ts
 
-    return Rs, Ts, As
+    return loss
+
+def optimize(wv_sweep, nG=40, 
+          theta_start=0, theta_end=80, n_theta=10, theta_sweep=True, 
+          Nx=100, Ny=100, Np=10, structure=dev_structure, diameter=1, weight=1, epoch=100, print_every=10, plot=False):
+    """
+    wv in nm
+    nG = truncation order
+    theta in degrees
+    if theta_sweep == False: use theta_start as the angle
+    """
+    fun = lambda x: loss_fun(x, wv_sweep, nG, 
+          theta_start, theta_end, n_theta, theta_sweep, 
+          Nx, Ny, Np, structure, diameter)
+    grad_fun = grad(fun)
+
+    thicknesses = np.array([thickness for _, thickness, _ in structure])
+    # thicknesses = np.ones_like(thicknesses) * .01
+
+    print("Initial loss:", loss_fun(thicknesses, wv_sweep, nG, 
+          theta_start, theta_end, n_theta, theta_sweep, 
+          Nx, Ny, Np, structure, diameter, plot=plot))
+    # start_time = time.time()
+    for i in range(epoch):
+        grad_res = grad_fun(thicknesses)
+        thicknesses -= grad_res * weight
+        thicknesses = np.maximum(thicknesses, 0)
+        
+        if i % print_every == 0:
+            # current_time = time.time() - start_time
+            print(f"Epoch {i}: ", loss_fun(thicknesses, wv_sweep, nG, 
+                                theta_start, theta_end, n_theta, theta_sweep, 
+                                Nx, Ny, Np, structure, diameter, plot=plot))
+            print(thicknesses)
+
+    # current_time = time.time() - start_time
+    print("Trained loss:", loss_fun(thicknesses, wv_sweep, nG, 
+                                theta_start, theta_end, n_theta, theta_sweep, 
+                                Nx, Ny, Np, structure, diameter,plot=plot))
+    return thicknesses
