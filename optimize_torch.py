@@ -77,7 +77,7 @@ Qabs = np.inf
 
 def loss_fun(thicknesses, wv_sweep, device, nG=40, 
           theta_start=0, theta_end=80, n_theta=10, theta_sweep=True, 
-          Nx=100, Ny=100, Np=10, structure=dev_structure, diameter=1, plot=False):
+          Nx=100, Ny=100, Np=10, structure=dev_structure, diameter=1, plot=False, title=""):
     """
     wv in nm
     nG = truncation order
@@ -94,9 +94,12 @@ def loss_fun(thicknesses, wv_sweep, device, nG=40,
     freqcmps = freqs*(1+1j/2/Qabs)
 
     # lattice constants
-    L1 = [diameter*np.sqrt(3),0] # 1 um
-    L2 = [0,1*diameter]
-    
+    if diameter:
+        L1 = [diameter*np.sqrt(3),0] # 1 um
+        L2 = [0,1*diameter]
+    else:
+        L1 = [1, 0] # 1 um
+        L2 = [0, 1]
     theta = torch.linspace(theta_start, theta_end * DEG_TO_RAD, n_theta, device=device)
     phi = torch.tensor(0., device=device)
 
@@ -149,15 +152,16 @@ def loss_fun(thicknesses, wv_sweep, device, nG=40,
         mask = (wv_sweep >= 8) & (wv_sweep <= 13)
 
         loss = loss + (R[mask].real**2).sum()
-        # loss = loss + ((1 - R[~mask].real)**2).sum()
+        loss = loss + ((1 - R[~mask].real)**2).sum()
 
         if not theta_sweep:
             if plot:
                 plt.clf()
                 plt.plot(wv_sweep, 1 - R)
-                plt.title('Absorbance')
                 plt.xlabel('Wavelength (μm)')
+                plt.ylabel('Absorbance')
                 plt.ylim(0, 1)
+                plt.title(title)
                 plt.show()
             return loss
         else:
@@ -168,9 +172,10 @@ def loss_fun(thicknesses, wv_sweep, device, nG=40,
         R = torch.mean(Rs,dim=0)
         plt.clf()
         plt.plot(wv_sweep, 1 - R)
-        plt.title('Absorbance')
         plt.xlabel('Wavelength (μm)')
+        plt.ylabel('Absorbance')
         plt.ylim(0, 1)
+        plt.title(title)
         plt.show()
 
     return loss
@@ -195,7 +200,7 @@ def optimize_torch(wv_sweep, device, nG=40,
 
     print("Initial loss:", loss_fun(thicknesses, wv_sweep, device, nG, 
           theta_start, theta_end, n_theta, theta_sweep, 
-          Nx, Ny, Np, structure, diameter, plot=plot))
+          Nx, Ny, Np, structure, diameter, plot=plot, title="Absorption before optimization"))
 
     for i in range(epoch):
         optimizer.zero_grad()
@@ -216,6 +221,6 @@ def optimize_torch(wv_sweep, device, nG=40,
 
     print("Final loss:", loss_fun(thicknesses, wv_sweep, device, nG, 
                                   theta_start, theta_end, n_theta, theta_sweep, 
-                                  Nx, Ny, Np, structure, diameter, plot=plot))
+                                  Nx, Ny, Np, structure, diameter, plot=plot, title="Absorption after optimization"))
     
     return thicknesses.detach().numpy(), diameter.detach().numpy() if diameter else None

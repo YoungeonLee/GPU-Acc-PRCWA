@@ -88,10 +88,14 @@ def beads_torch(wv_sweep, device, nG=40,
     freqcmps = freqs*(1+1j/2/Qabs)
 
     # lattice constants
-    L1 = [diameter*np.sqrt(3),0] # 1 um
-    L2 = [0,1*diameter]
+    if diameter:
+        L1 = [diameter*np.sqrt(3),0] # 1 um
+        L2 = [0,1*diameter]
+    else:
+        L1 = [1,0] # 1 um
+        L2 = [0,1]        
     
-    theta = torch.linspace(theta_start, theta_end * DEG_TO_RAD, n_theta, device=device)
+    theta = torch.linspace(theta_start * DEG_TO_RAD, theta_end * DEG_TO_RAD, n_theta, device=device)
     phi = torch.tensor(0., device=device)
 
     Rs = torch.zeros_like(freqs)
@@ -106,10 +110,6 @@ def beads_torch(wv_sweep, device, nG=40,
         
         for i in range(len(structure)):
             material, _, _ = structure[i]
-            if material == Ti:
-                if wavelength > 2.3:
-                    material = Ti_2
-
             current_eps = torch.ones(len(freqs), dtype=complex)
             for j in range(len(wv_sweep)):
                 wavelength = wv_sweep[j]
@@ -158,4 +158,4 @@ def beads_torch(wv_sweep, device, nG=40,
     Ts = torch.mean(Tss,axis=0)
     As = 1 - Rs - Ts
 
-    return Rss, Tss, As
+    return Rs, Ts, As
