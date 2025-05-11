@@ -163,10 +163,9 @@ def loss_fun(thicknesses, wv_sweep, nG=40,
         Rss.append(Rs)
         Tss.append(Ts)
 
-    raise NotImplementedError
     Rs = np.mean(Rss,axis=0)
     Ts = np.mean(Tss,axis=0)
-    As = 1 - Rs - Ts
+    # As = 1 - Rs - Ts
 
     return loss
 
@@ -187,9 +186,9 @@ def optimize(wv_sweep, nG=40,
     thicknesses = np.array([thickness for _, thickness, _ in structure])
     # thicknesses = np.ones_like(thicknesses) * .01
 
-    print("Initial loss:", loss_fun(thicknesses, wv_sweep, nG, 
-          theta_start, theta_end, n_theta, theta_sweep, 
-          Nx, Ny, Np, structure, diameter, plot=plot))
+    # print("Initial loss:", loss_fun(thicknesses, wv_sweep, nG, 
+    #       theta_start, theta_end, n_theta, theta_sweep, 
+    #       Nx, Ny, Np, structure, diameter, plot=plot))
     # start_time = time.time()
     for i in range(epoch):
         grad_res = grad_fun(thicknesses)
@@ -204,7 +203,7 @@ def optimize(wv_sweep, nG=40,
             print(thicknesses)
 
     # current_time = time.time() - start_time
-    print("Trained loss:", loss_fun(thicknesses, wv_sweep, nG, 
-                                theta_start, theta_end, n_theta, theta_sweep, 
-                                Nx, Ny, Np, structure, diameter,plot=plot))
+    # print("Trained loss:", loss_fun(thicknesses, wv_sweep, nG, 
+    #                             theta_start, theta_end, n_theta, theta_sweep, 
+    #                             Nx, Ny, Np, structure, diameter,plot=plot))
     return thicknesses

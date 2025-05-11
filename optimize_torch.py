@@ -101,72 +101,63 @@ def loss_fun(thicknesses, wv_sweep, device, nG=40,
         L1 = [1, 0] # 1 um
         L2 = [0, 1]
     theta = torch.linspace(theta_start, theta_end * DEG_TO_RAD, n_theta, device=device)
+    if theta_sweep == False:
+        theta = theta[0]
+    else:
+        theta = theta.reshape(1, -1)
     phi = torch.tensor(0., device=device)
 
-    # TODO: optimize looking up epsilon
-    for z in range(len(theta)):
-        ######### setting up RCWA
-        material_eps = torch.ones(len(freqs), len(structure), device=device, dtype=complex)
-        
-        for i in range(len(structure)):
-            material, _, _ = structure[i]
-            if material == Ti:
-                if wavelength > 2.3:
-                    material = Ti_2
+    ######### setting up RCWA
+    material_eps = torch.ones(len(freqs), len(structure), device=device, dtype=complex)
+    
+    for i in range(len(structure)):
+        material, _, _ = structure[i]
+        if material == Ti:
+            if wavelength > 2.3:
+                material = Ti_2
 
-            current_eps = torch.ones(len(freqs), dtype=complex)
-            for j in range(len(wv_sweep)):
-                wavelength = wv_sweep[j]
-                current_eps[j] = Index_Lookup(material, wavelength)
-                material_eps[:, i] = current_eps
+        current_eps = torch.ones(len(freqs), dtype=complex)
+        for j in range(len(wv_sweep)):
+            wavelength = wv_sweep[j]
+            current_eps[j] = Index_Lookup(material, wavelength)
+            material_eps[:, i] = current_eps
 
-        obj = grcwa_torch.obj(nG,L1,L2,freqcmps,theta[z],phi,verbose=0, eps_batch_=True)
-        epgrids = torch.empty(len(freqs), 0, device=device, dtype=complex)
-        for j in range(len(structure)):
-            material, thickness, type = structure[j]
-            if type == "slab":
-                obj.Add_LayerUniform(thicknesses[j], material_eps[:, j:j+1])
-            elif type == "honeycomb":
-                # assert thickness == diameter
-                epgrid = honeycomb_lattice(obj,Nx,Ny,Np,material_eps[:, j:j+1],diameter,device)
-                epgrids = torch.cat((epgrids, epgrid), dim=1)
-            else:
-                raise NotImplementedError
-
-        obj.Init_Setup(device)
-
-        if epgrids.shape[-1] != 0:
-            obj.GridLayer_geteps(epgrids, device)
-
-        # planewave excitation
-        p_amp = torch.tensor(1, device=device)
-        s_amp = torch.tensor(0, device=device)
-        p_phase = torch.tensor(0, device=device)
-        s_phase = torch.tensor(0, device=device)
-        planewave={'p_amp':p_amp,'s_amp':s_amp,'p_phase':p_phase,'s_phase':s_phase}
-        obj.MakeExcitationPlanewave(planewave['p_amp'],planewave['p_phase'],planewave['s_amp'],planewave['s_phase'],device,order = 0)
-
-        # compute reflection and transmission
-        R,T= obj.RT_Solve(device, normalize=1)
-
-        mask = (wv_sweep >= 8) & (wv_sweep <= 13)
-
-        loss = loss + (R[mask].real**2).sum()
-        loss = loss + ((1 - R[~mask].real)**2).sum()
-
-        if not theta_sweep:
-            if plot:
-                plt.clf()
-                plt.plot(wv_sweep, 1 - R)
-                plt.xlabel('Wavelength (μm)')
-                plt.ylabel('Absorbance')
-                plt.ylim(0, 1)
-                plt.title(title)
-                plt.show()
-            return loss
+    obj = grcwa_torch.obj(nG,L1,L2,freqcmps,theta,phi,verbose=0, eps_batch_=True)
+    epgrids = torch.empty(len(freqs), 0, device=device, dtype=complex)
+    for j in range(len(structure)):
+        material, thickness, type = structure[j]
+        if type == "slab":
+            obj.Add_LayerUniform(thicknesses[j], material_eps[:, j:j+1])
+        elif type == "honeycomb":
+            # assert thickness == diameter
+            epgrid = honeycomb_lattice(obj,Nx,Ny,Np,material_eps[:, j:j+1],diameter,device)
+            epgrids = torch.cat((epgrids, epgrid), dim=1)
         else:
-            if plot:
-                Rs[z] = R.real.detach()
+            raise NotImplementedError
+
+    obj.Init_Setup(device)
+
+    if epgrids.shape[-1] != 0:
+        obj.GridLayer_geteps(epgrids, device)
+
+    # planewave excitation
+    p_amp = torch.tensor(1, device=device)
+    s_amp = torch.tensor(0, device=device)
+    p_phase = torch.tensor(0, device=device)
+    s_phase = torch.tensor(0, device=device)
+    planewave={'p_amp':p_amp,'s_amp':s_amp,'p_phase':p_phase,'s_phase':s_phase}
+    obj.MakeExcitationPlanewave(planewave['p_amp'],planewave['p_phase'],planewave['s_amp'],planewave['s_phase'],device,order = 0)
+
+    # compute reflection and transmission
+    R,T= obj.RT_Solve(device, normalize=1)
+
+    mask = (wv_sweep >= 8) & (wv_sweep <= 13)
+
+    print(R.shape)
+    print(R[mask].shape)
+
+    loss = loss + (R[mask].real**2).sum()
+    loss = loss + ((1 - R[~mask].real)**2).sum()
 
     if plot:
         R = torch.mean(Rs,dim=0)
@@ -198,9 +189,9 @@ def optimize_torch(wv_sweep, device, nG=40,
         optimizing_params.append(diameter)
     optimizer = torch.optim.SGD(optimizing_params, lr=weight)
 
-    print("Initial loss:", loss_fun(thicknesses, wv_sweep, device, nG, 
-          theta_start, theta_end, n_theta, theta_sweep, 
-          Nx, Ny, Np, structure, diameter, plot=plot, title="Absorption before optimization"))
+    # print("Initial loss:", loss_fun(thicknesses, wv_sweep, device, nG, 
+    #       theta_start, theta_end, n_theta, theta_sweep, 
+    #       Nx, Ny, Np, structure, diameter, plot=plot, title="Absorption before optimization"))
 
     for i in range(epoch):
         optimizer.zero_grad()
@@ -219,8 +210,8 @@ def optimize_torch(wv_sweep, device, nG=40,
             if diameter:
                 print("Diameter:", diameter.detach().numpy())
 
-    print("Final loss:", loss_fun(thicknesses, wv_sweep, device, nG, 
-                                  theta_start, theta_end, n_theta, theta_sweep, 
-                                  Nx, Ny, Np, structure, diameter, plot=plot, title="Absorption after optimization"))
+    # print("Final loss:", loss_fun(thicknesses, wv_sweep, device, nG, 
+    #                               theta_start, theta_end, n_theta, theta_sweep, 
+    #                               Nx, Ny, Np, structure, diameter, plot=plot, title="Absorption after optimization"))
     
     return thicknesses.detach().numpy(), diameter.detach().numpy() if diameter else None
